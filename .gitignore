@@ -1,0 +1,31 @@
+# Local secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local runtime data
+*.db
+*.sqlite
+*.sqlite3
+data/uploads/*
+!data/uploads/.gitkeep
+data/knowledge_index.json
+data/*.log
+database/*
+!database/.gitkeep
+tmp/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.agents/
+.codex/
+.playwright-cli/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IELTS Learning Agent</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314213d'/%3E%3Cpath d='M18 18h28v7H27v7h16v7H27v7h19v7H18z' fill='%2310b981'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/static/styles.css?v=13" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">IELTS Learning Agent</p>
+        <h1>雅思学习智能体</h1>
+        <div class="service-chip" id="serviceStatus">服务检测中</div>
+      </div>
+      <nav>
+        <a href="#today" data-view-link="today">今日学习</a>
+        <a href="#practice" data-view-link="practice">专项训练</a>
+        <a href="#library" data-view-link="library">资料与记录</a>
+      </nav>
+      <p class="nav-hint">三个入口覆盖完整备考流程</p>
+    </header>
+
+    <main class="app-main">
+      <section class="workspace view" id="today" data-view="today">
+        <div class="welcome-bar">
+          <div>
+            <h2>今天先做一件最重要的事</h2>
+            <p>建立画像后，让学习主管根据弱项安排任务；不需要在十几个页面之间来回找功能。</p>
+          </div>
+          <div class="user-status">
+            <span class="status-dot"></span>
+            <div><strong>当前用户</strong><p id="currentUserId">尚未创建画像</p></div>
+          </div>
+        </div>
+        <div class="tool-tabs" aria-label="今日学习步骤">
+          <button class="tool-tab active" data-tool-link="profile">1. 我的目标</button>
+          <button class="tool-tab" data-tool-link="supervisor">2. AI 安排</button>
+          <button class="tool-tab" data-tool-link="plan">3. 学习计划</button>
+        </div>
+        <article class="panel tool-panel" id="profile" data-tool="profile" data-tool-group="today">
+          <div class="panel-heading">
+            <h3>我的备考目标</h3>
+            <span>只需设置一次，AI 会根据当前分、目标分和弱项安排训练。</span>
+          </div>
+          <form id="profileForm" class="form-grid">
+            <label>当前分数 <input name="current_band" type="number" step="0.5" min="0" max="9" value="5.5" /></label>
+            <label>目标分数 <input name="target_band" type="number" step="0.5" min="0" max="9" value="6.5" /></label>
+            <label>备考天数 <input name="prep_days" type="number" min="7" value="30" /></label>
+            <label>每天分钟 <input name="daily_minutes" type="number" min="15" value="120" /></label>
+            <label class="wide">弱项，用英文逗号分隔 <input name="weak_skills" value="Writing,Speaking" /></label>
+            <label class="wide">重点提升项 <input name="focus_areas" value="grammar,writing logic" /></label>
+            <button class="button primary" id="profileCreateButton" type="submit">创建画像</button>
+            <button class="button secondary" id="profileLoadButton" type="button">读取当前画像</button>
+            <button class="button secondary" id="profileUpdateButton" type="button">保存修改</button>
+            <button class="button secondary danger" id="profileDeleteButton" type="button">删除当前画像</button>
+          </form>
+        </article>
+
+        <article class="panel tool-panel" id="supervisor" data-tool="supervisor" data-tool-group="today" hidden>
+          <div class="panel-heading">
+            <h3>AI 学习安排</h3>
+            <span>不知道练什么时直接点击“安排今日训练”，系统会结合画像和错题选择专项。</span>
+          </div>
+          <div class="form-grid">
+            <label>想重点练（可选）
+              <select id="supervisorSkill">
+                <option value="">让 AI 自动判断</option>
+                <option value="listening">听力</option>
+                <option value="speaking">口语</option>
+                <option value="reading">阅读</option>
+                <option value="writing">写作</option>
+              </select>
+            </label>
+            <label>口语 Part
+              <select id="supervisorSpeakingPart">
+                <option value="1">Part 1</option>
+                <option value="2">Part 2</option>
+                <option value="3">Part 3</option>
+              </select>
+            </label>
+            <label class="wide">补充内容（可留空）
+              <textarea id="supervisorInput" rows="5" placeholder="可以粘贴作文、口语回答或题目答案。留空时 AI 会直接安排训练。"></textarea>
+            </label>
+          </div>
+          <div class="hero-actions">
+            <button class="button primary" id="coachSupervisorButton">安排今日训练</button>
+            <button class="button secondary" id="diagnoseSupervisorButton">查看判断依据</button>
+          </div>
+          <div id="supervisorResult" class="result"></div>
+        </article>
+
+        <article class="panel tool-panel" id="plan" data-tool="plan" data-tool-group="today" hidden>
+          <div class="panel-heading">
+            <h3>我的学习计划</h3>
+            <span>生成一份可打卡的短期计划，完成后直接标记进度。</span>
+          </div>
+          <label>计划天数 <input id="planDays" type="number" min="1" max="90" value="7" /></label>
+          <div class="hero-actions compact-actions">
+            <button class="button primary" id="generatePlanButton">生成计划</button>
+            <button class="button secondary" id="loadLatestPlanButton">读取最近计划</button>
+          </div>
+          <div id="planResult" class="result"></div>
+        </article>
+      </section>
+
+      <section class="workspace view" id="practice" data-view="practice" hidden>
+        <div class="section-intro"><h2>专项训练</h2><p>选择一项开始练习，结果仍会自动进入同一个学习闭环。</p></div>
+        <div class="tool-tabs" aria-label="专项训练类型">
+          <button class="tool-tab active" data-tool-link="writing">写作</button>
+          <button class="tool-tab" data-tool-link="speaking">口语</button>
+          <button class="tool-tab" data-tool-link="reading">阅读</button>
+          <button class="tool-tab" data-tool-link="listening">听力</button>
+          <button class="tool-tab" data-tool-link="vocabulary">词汇</button>
+        </div>
+        <article class="panel tool-panel" id="writing" data-tool="writing" data-tool-group="practice">
+          <div class="panel-heading">
+            <h3>写作批改</h3>
+            <span>写作 Agent 按任务回应、连贯衔接、词汇和语法四个方向给反馈。</span>
+          </div>
+          <label>作文类型
+            <select id="taskType">
+              <option>Task 2</option>
+              <option>Task 1</option>
+            </select>
+          </label>
+          <textarea id="essayText" rows="8">Education is important because it helps people get better jobs. Many students study online because online study is flexible and useful. However, some students need teachers because they cannot manage time well. In my opinion, schools should combine online learning and classroom learning.</textarea>
+          <button class="button primary" id="reviewWritingButton">提交批改</button>
+          <div id="writingResult" class="result"></div>
+        </article>
+
+        <article class="panel tool-panel" id="speaking" data-tool="speaking" data-tool-group="practice" hidden>
+          <div class="panel-heading">
+            <h3>口语陪练</h3>
+            <span>口语 Agent 生成题目、追问和文本版反馈；当前版本不假装判断真实发音。</span>
+          </div>
+          <label>Part
+            <select id="speakingPart">
+              <option value="1">Part 1</option>
+              <option value="2">Part 2</option>
+              <option value="3">Part 3</option>
+            </select>
+          </label>
+          <textarea id="speakingAnswer" rows="5" placeholder="先留空可生成题目；输入回答后可获得反馈。"></textarea>
+          <button class="button primary" id="practiceSpeakingButton">开始口语练习</button>
+          <div id="speakingResult" class="result"></div>
+        </article>
+
+        <article class="panel tool-panel" id="reading" data-tool="reading" data-tool-group="practice" hidden>
+          <div class="panel-heading">
+            <h3>阅读训练</h3>
+            <span>阅读 Agent 重点训练定位词、同义替换和 True / False / Not Given 陷阱。</span>
+          </div>
+          <input id="readingAnswer" placeholder="True / False / Not Given" />
+          <button class="button primary" id="practiceReadingButton">生成或批改阅读题</button>
+          <div id="readingResult" class="result"></div>
+        </article>
+
+        <article class="panel tool-panel" id="listening" data-tool="listening" data-tool-group="practice" hidden>
+          <div class="panel-heading">
+            <h3>听力文本训练</h3>
+            <span>听力 Agent 用文本转写模拟听力，训练关键词、时间数字和改口陷阱。</span>
+          </div>
+          <input id="listeningAnswer" placeholder="例如 9:15" />
+          <button class="button primary" id="practiceListeningButton">生成或批改听力题</button>
+          <div id="listeningResult" class="result"></div>
+        </article>
+
+        <article class="panel tool-panel" id="vocabulary" data-tool="vocabulary" data-tool-group="practice" hidden>
+          <div class="panel-heading">
+            <h3>词汇任务</h3>
+            <span>词汇 Agent 按主题生成词义、例句、搭配和雅思使用建议。</span>
+          </div>
+          <label>主题
+            <select id="vocabTopic">
+              <option>education</option>
+              <option>environment</option>
+              <option>technology</option>
+              <option>society</option>
+              <option>health</option>
+              <option>work</option>
+              <option>culture</option>
+            </select>
+          </label>
+          <button class="button primary" id="generateVocabButton">生成词汇</button>
+          <div id="vocabResult" class="result"></div>
+        </article>
+      </section>
+
+      <section class="workspace view" id="library" data-view="library" hidden>
+        <div class="section-intro"><h2>资料与记录</h2><p>模考、资料练习和错题复盘集中在这里。</p></div>
+        <div class="tool-tabs" aria-label="资料与记录类型">
+          <button class="tool-tab active" data-tool-link="exam">模拟考试</button>
+          <button class="tool-tab" data-tool-link="documents">资料练习</button>
+          <button class="tool-tab" data-tool-link="errors">错题本</button>
+        </div>
+        <article class="panel tool-panel" id="exam" data-tool="exam" data-tool-group="library">
+          <div class="panel-heading">
+            <h3>Academic Reading 完整模拟考试</h3>
+            <span>三篇文章、40 道题、60 分钟。系统直接从 database 中的 Cambridge 真题读取试卷，交卷后统一判分。</span>
+          </div>
+          <div class="exam-toolbar">
+            <div class="score" id="examTimer">60:00</div>
+            <button class="button secondary" id="startReadingExamButton" type="button">重新开始 Test 1</button>
+            <button class="button primary" id="submitReadingExamButton" type="button">交卷并分析</button>
+          </div>
+          <div id="readingExamResult" class="result"></div>
+        </article>
+
+        <article class="panel tool-panel" id="documents" data-tool="documents" data-tool-group="library" hidden>
+          <div class="panel-heading">
+            <h3>资料练习</h3>
+            <span>系统会从资料中出题。上传和管理资料属于次要操作，放在本页下方。</span>
+          </div>
+          <div class="form-grid">
+            <label>训练模块
+              <select id="knowledgeSkill">
+                <option value="auto">主管根据弱项自动选择</option>
+                <option value="reading">阅读</option>
+                <option value="listening">听力文本</option>
+                <option value="vocabulary">词汇</option>
+                <option value="writing">写作</option>
+              </select>
+            </label>
+            <label>主题（可选）
+              <input id="knowledgeTopic" placeholder="例如 environment、education" />
+            </label>
+            <button class="button secondary wide" id="knowledgeQuestionButton" type="button">换一道题</button>
+            <label class="wide">我的答案
+              <textarea id="knowledgeAnswer" rows="6" placeholder="先生成题目，再在这里作答。写作题可提交完整作文。"></textarea>
+            </label>
+            <button class="button primary wide" id="knowledgeAnalyzeButton" type="button">提交并分析</button>
+          </div>
+          <div id="knowledgeResult" class="result"></div>
+          <hr />
+          <form id="documentForm" class="form-grid">
+            <label class="wide">选择文件
+              <input id="documentFile" name="file" type="file" accept=".pdf,.txt,.md,.docx,.pptx" />
+            </label>
+            <label>分类
+              <select id="documentCategory" name="category">
+                <option value="ielts_book">雅思教材</option>
+                <option value="writing_sample">写作范文</option>
+                <option value="speaking_material">口语素材</option>
+                <option value="reading_material">阅读资料</option>
+                <option value="listening_material">听力资料</option>
+                <option value="notes">个人笔记</option>
+              </select>
+            </label>
+            <label>备注
+              <input id="documentNotes" name="notes" placeholder="例如 Cambridge 18 Test 1 Reading" />
+            </label>
+            <button class="button primary" id="uploadDocumentButton" type="submit">上传到资料库</button>
+            <button class="button secondary" id="refreshDocumentsButton" type="button">刷新资料列表</button>
+          </form>
+          <div id="documentsResult" class="result"></div>
+        </article>
+
+        <article class="panel tool-panel" id="errors" data-tool="errors" data-tool-group="library" hidden>
+          <div class="panel-heading">
+            <h3>错题本</h3>
+            <span>集中复盘听说读写中的典型问题，AI 也会参考这些记录安排下一次训练。</span>
+          </div>
+          <button class="button secondary" id="refreshErrorsButton">刷新错题本</button>
+          <div id="errorsResult" class="result"></div>
+        </article>
+      </section>
+    </main>
+
+    <script src="/static/app.js?v=13"></script>
+  </body>
+</html>
