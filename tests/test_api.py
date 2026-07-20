@@ -23,6 +23,8 @@ from app.main import app
 
 init_db()
 client = TestClient(app)
+ACCOUNT_SEQUENCE = 0
+ACCOUNT_CREDENTIALS: dict[int, tuple[str, str]] = {}
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -33,6 +35,13 @@ def cleanup_test_runtime():
 
 
 def create_profile() -> int:
+    global ACCOUNT_SEQUENCE
+    ACCOUNT_SEQUENCE += 1
+    email = f"learner{ACCOUNT_SEQUENCE}@example.com"
+    password = f"Secure-pass-{ACCOUNT_SEQUENCE}!"
+    registered = client.post("/auth/register", json={"email": email, "password": password})
+    assert registered.status_code == 201
+    client.headers["X-CSRF-Token"] = client.cookies.get("ielts_csrf")
     response = client.post(
         "/profile/create",
         json={
@@ -45,13 +54,60 @@ def create_profile() -> int:
         },
     )
     assert response.status_code == 200
-    return response.json()["id"]
+    profile_id = response.json()["id"]
+    ACCOUNT_CREDENTIALS[profile_id] = (email, password)
+    return profile_id
+
+
+def login_as(profile_id: int) -> None:
+    email, password = ACCOUNT_CREDENTIALS[profile_id]
+    response = client.post("/auth/login", json={"email": email, "password": password})
+    assert response.status_code == 200
+    client.headers["X-CSRF-Token"] = client.cookies.get("ielts_csrf")
 
 
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_authentication_session_csrf_and_logout():
+    browser = TestClient(app)
+    assert browser.get("/auth/status").json()["authenticated"] is False
+    assert browser.get("/auth/me").status_code == 401
+
+    credentials = {"email": "auth-check@example.com", "password": "A-secure-password!"}
+    registered = browser.post("/auth/register", json=credentials)
+    assert registered.status_code == 201
+    assert registered.json()["profile_id"] is None
+    assert browser.cookies.get("ielts_session")
+    csrf_token = browser.cookies.get("ielts_csrf")
+    assert csrf_token
+    assert browser.get("/auth/status").json()["authenticated"] is True
+
+    profile_payload = {
+        "current_band": 5.0,
+        "target_band": 6.5,
+        "prep_days": 30,
+        "daily_minutes": 90,
+        "weak_skills": ["writing"],
+        "focus_areas": ["grammar"],
+    }
+    assert browser.post("/profile/create", json=profile_payload).status_code == 403
+    browser.headers["X-CSRF-Token"] = csrf_token
+    created = browser.post("/profile/create", json=profile_payload)
+    assert created.status_code == 200
+    profile_id = created.json()["id"]
+    assert browser.get("/auth/me").json()["profile_id"] == profile_id
+    assert browser.get(f"/profile/{profile_id + 1}").status_code == 403
+
+    duplicate = browser.post("/auth/register", json=credentials)
+    assert duplicate.status_code == 409
+    assert browser.post("/auth/login", json={**credentials, "password": "wrong-password"}).status_code == 401
+    assert browser.post("/auth/logout").status_code == 204
+    assert browser.get("/auth/status").json()["authenticated"] is False
+    assert browser.get("/auth/me").status_code == 401
 
 
 def test_core_learning_flow():
@@ -142,8 +198,9 @@ def test_document_upload_flow():
 
 
 def test_database_material_question_and_analysis_flow():
-    profile = client.post(
-        "/profile/create",
+    user_id = create_profile()
+    profile = client.put(
+        f"/profile/{user_id}",
         json={
             "current_band": 5.5,
             "target_band": 6.5,
@@ -154,7 +211,6 @@ def test_database_material_question_and_analysis_flow():
         },
     )
     assert profile.status_code == 200
-    user_id = profile.json()["id"]
 
     status = client.get("/knowledge/status")
     assert status.status_code == 200
@@ -340,8 +396,8 @@ def test_profile_read_update_and_delete():
 
     deleted = client.delete(f"/profile/{user_id}")
     assert deleted.status_code == 200
-    assert client.get(f"/profile/{user_id}").status_code == 404
-    assert client.get(f"/study-plan/{user_id}/latest").status_code == 404
+    assert client.get(f"/profile/{user_id}").status_code == 403
+    assert client.get(f"/study-plan/{user_id}/latest").status_code == 403
     assert not list((TEST_DIR / "uploads").glob("*"))
 
 
@@ -445,10 +501,10 @@ def test_direct_practice_and_vocabulary_routes_save_expected_results():
         ("post", "/exam/reading/submit", {"user_id": 999_999, "answers": {}}),
     ],
 )
-def test_profile_scoped_routes_reject_unknown_users(method, path, payload):
+def test_profile_scoped_routes_reject_other_user_ids(method, path, payload):
     response = client.request(method, path, json=payload)
-    assert response.status_code == 404
-    assert response.json()["detail"] == "User profile not found."
+    assert response.status_code == 403
+    assert response.json()["detail"] == "无权访问其他用户的数据。"
 
 
 def test_study_plan_not_found_and_completion_reversal():
@@ -471,6 +527,7 @@ def test_study_plan_not_found_and_completion_reversal():
 def test_document_ownership_and_additional_upload_boundaries():
     owner_id = create_profile()
     other_id = create_profile()
+    login_as(owner_id)
     uploaded = client.post(
         "/documents/upload",
         data={"user_id": str(owner_id), "category": "notes", "notes": "private"},
@@ -479,9 +536,9 @@ def test_document_ownership_and_additional_upload_boundaries():
     assert uploaded.status_code == 200
     document_id = uploaded.json()["item"]["id"]
 
-    assert client.get(f"/documents/{other_id}/{document_id}/download").status_code == 404
-    assert client.delete(f"/documents/{other_id}/{document_id}").status_code == 404
-    assert client.get("/documents/999999").status_code == 404
+    assert client.get(f"/documents/{other_id}/{document_id}/download").status_code == 403
+    assert client.delete(f"/documents/{other_id}/{document_id}").status_code == 403
+    assert client.get("/documents/999999").status_code == 403
 
     cases = [
         (("malware.exe", b"unsafe", "application/octet-stream"), "notes", "", 400),
@@ -502,6 +559,7 @@ def test_document_ownership_and_additional_upload_boundaries():
 def test_knowledge_correct_answer_and_question_ownership():
     owner_id = create_profile()
     other_id = create_profile()
+    login_as(owner_id)
     generated = client.post(
         "/knowledge/question",
         json={"user_id": owner_id, "skill": "reading", "topic": "environment"},
@@ -509,12 +567,14 @@ def test_knowledge_correct_answer_and_question_ownership():
     assert generated.status_code == 200
     question_id = generated.json()["question_id"]
 
+    login_as(other_id)
     denied = client.post(
         "/knowledge/analyze",
         json={"user_id": other_id, "question_id": question_id, "answer": "anything"},
     )
     assert denied.status_code == 404
 
+    login_as(owner_id)
     wrong = client.post(
         "/knowledge/analyze",
         json={"user_id": owner_id, "question_id": question_id, "answer": "wrong"},
@@ -545,8 +605,9 @@ def test_supervisor_routes_to_each_remaining_skill():
 
 
 def test_supervisor_without_input_generates_a_source_backed_question():
-    profile = client.post(
-        "/profile/create",
+    user_id = create_profile()
+    profile = client.put(
+        f"/profile/{user_id}",
         json={
             "current_band": 5.0,
             "target_band": 6.5,
@@ -556,7 +617,7 @@ def test_supervisor_without_input_generates_a_source_backed_question():
             "focus_areas": ["environment"],
         },
     )
-    user_id = profile.json()["id"]
+    assert profile.status_code == 200
     response = client.post("/supervisor/coach", json={"user_id": user_id})
     assert response.status_code == 200
     result = response.json()

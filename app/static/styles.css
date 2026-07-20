@@ -18,6 +18,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -124,6 +128,95 @@ nav a.active {
   color: #9fb0c8;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.account-card {
+  display: grid;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #d8e2f1;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.account-card strong {
+  color: #7df0c4;
+}
+
+.sidebar-button {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 7px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.auth-shell {
+  width: calc(100% - 320px);
+  min-height: 100vh;
+  margin-left: 300px;
+  padding: 8vh 20px 40px 0;
+  display: grid;
+  place-items: center;
+}
+
+.auth-panel {
+  width: min(720px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(280px, 1.1fr);
+  gap: 42px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: clamp(28px, 5vw, 52px);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow);
+}
+
+.auth-panel h2 {
+  margin: 0 0 14px;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.1;
+}
+
+.auth-panel p,
+.auth-message {
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.auth-form {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.auth-message {
+  min-height: 24px;
+  font-size: 13px;
+}
+
+.auth-message.error {
+  color: var(--danger);
 }
 
 .app-main {
@@ -962,6 +1055,17 @@ textarea:focus {
 }
 
 @media (max-width: 980px) {
+  .auth-shell {
+    width: 100%;
+    min-height: auto;
+    margin-left: 0;
+    padding: 120px 18px 40px;
+  }
+
+  .auth-panel {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
   .topbar {
     position: sticky;
     inset: auto;

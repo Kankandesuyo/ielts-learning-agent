@@ -5,8 +5,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.database import init_db
+from app.security import enforce_authentication
 from app.services.knowledge_service import KnowledgeService
-from app.routers import documents, errors, exam, health, knowledge, listening, profile, reading, speaking, study_plan, supervisor, vocabulary, writing
+from app.routers import auth, documents, errors, exam, health, knowledge, listening, profile, reading, speaking, study_plan, supervisor, vocabulary, writing
 
 
 @asynccontextmanager
@@ -25,8 +26,10 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    app.middleware("http")(enforce_authentication)
 
     app.include_router(health.router)
+    app.include_router(auth.router)
     app.include_router(profile.router)
     app.include_router(study_plan.router)
     app.include_router(writing.router)

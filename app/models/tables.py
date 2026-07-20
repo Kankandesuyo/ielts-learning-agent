@@ -24,6 +24,35 @@ class UserProfile(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
 
+class AuthAccount(Base):
+    """Login identity kept separate from the learner profile.
+
+    This lets an account exist before onboarding is complete, while profile_id
+    provides the server-side ownership boundary for all learning data.
+    """
+
+    __tablename__ = "auth_accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    email: Mapped[str] = mapped_column(String(254), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    profile_id: Mapped[int | None] = mapped_column(ForeignKey("user_profiles.id"), unique=True, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+
+class AuthSession(Base):
+    """A revocable server-side session; the raw token is never stored."""
+
+    __tablename__ = "auth_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("auth_accounts.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    csrf_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+
 class ErrorEntry(Base):
     __tablename__ = "error_entries"
 

@@ -1,4 +1,4 @@
-let currentUserId = localStorage.getItem("ielts_user_id");
+let currentUserId = null;
 let currentKnowledgeQuestionId = null;
 let readingExam = null;
 let examTimerHandle = null;
@@ -13,27 +13,82 @@ const $ = (id) => document.getElementById(id);
 
 function setUser(id) {
   currentUserId = String(id);
-  localStorage.setItem("ielts_user_id", currentUserId);
   $("currentUserId").textContent = currentUserId;
 }
 
 function requireUser() {
   if (!currentUserId) {
-    throw new Error("请先创建用户画像。");
+    throw new Error("请先登录并创建用户画像。");
   }
   return Number(currentUserId);
 }
 
+function cookieValue(name) {
+  const prefix = `${encodeURIComponent(name)}=`;
+  const part = document.cookie.split("; ").find((item) => item.startsWith(prefix));
+  return part ? decodeURIComponent(part.slice(prefix.length)) : "";
+}
+
 async function api(path, options = {}) {
+  const method = String(options.method || "GET").toUpperCase();
+  const headers = { ...(options.headers || {}) };
+  if (options.body && !(options.body instanceof FormData) && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+    const csrfToken = cookieValue("ielts_csrf");
+    if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
+  }
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers,
   });
-  const data = await response.json();
+  const data = response.status === 204 ? null : await response.json();
   if (!response.ok) {
-    throw new Error(data.detail || "请求失败");
+    throw new Error(data?.detail || "请求失败");
   }
   return data;
+}
+
+function showAuthenticated(account) {
+  const authenticated = Boolean(account);
+  $("authGate").hidden = authenticated;
+  $("appMain").hidden = !authenticated;
+  $("mainNav").hidden = !authenticated;
+  $("accountCard").hidden = !authenticated;
+  $("navHint").hidden = !authenticated;
+  if (authenticated) {
+    $("accountEmail").textContent = account.email;
+    if (account.profile_id) {
+      setUser(account.profile_id);
+    } else {
+      currentUserId = null;
+      $("currentUserId").textContent = "请创建学习画像";
+    }
+  } else {
+    currentUserId = null;
+    $("currentUserId").textContent = "尚未登录";
+  }
+}
+
+async function submitCredentials(endpoint, button, loadingText) {
+  const target = $("authMessage");
+  target.classList.remove("error");
+  const credentials = {
+    email: $("authEmail").value.trim(),
+    password: $("authPassword").value,
+  };
+  try {
+    await withButtonLoading(button, loadingText, async () => {
+      const account = await api(endpoint, { method: "POST", body: JSON.stringify(credentials) });
+      showAuthenticated(account);
+      switchView("today", false);
+      target.textContent = "";
+    });
+  } catch (error) {
+    target.textContent = error.message;
+    target.classList.add("error");
+  }
 }
 
 async function withButtonLoading(button, label, task) {
@@ -797,7 +852,6 @@ $("profileDeleteButton").addEventListener("click", async () => {
   const target = $("currentUserId");
   try {
     await withButtonLoading($("profileDeleteButton"), "删除中...", () => api(`/profile/${userId}`, { method: "DELETE" }));
-    localStorage.removeItem("ielts_user_id");
     currentUserId = null;
     target.textContent = "画像已删除";
   } catch (error) {
@@ -995,7 +1049,11 @@ $("documentForm").addEventListener("submit", async (event) => {
       form.append("category", $("documentCategory").value);
       form.append("notes", $("documentNotes").value.trim());
       form.append("file", file);
-      const response = await fetch("/documents/upload", { method: "POST", body: form });
+      const response = await fetch("/documents/upload", {
+        method: "POST",
+        body: form,
+        headers: { "X-CSRF-Token": cookieValue("ielts_csrf") },
+      });
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.detail || "上传失败");
@@ -1100,7 +1158,10 @@ document.addEventListener("click", async (event) => {
   const target = $("documentsResult");
   try {
     await withButtonLoading(button, "删除中...", async () => {
-      const response = await fetch(`/documents/${requireUser()}/${documentId}`, { method: "DELETE" });
+      const response = await fetch(`/documents/${requireUser()}/${documentId}`, {
+        method: "DELETE",
+        headers: { "X-CSRF-Token": cookieValue("ielts_csrf") },
+      });
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.detail || "删除失败");
@@ -1143,16 +1204,40 @@ window.addEventListener("hashchange", () => {
   switchView(window.location.hash.replace("#", "") || "today", false);
 });
 
-if (currentUserId) {
-  $("currentUserId").textContent = currentUserId;
+$("authForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  submitCredentials("/auth/login", $("loginButton"), "登录中...");
+});
+
+$("registerButton").addEventListener("click", () => {
+  submitCredentials("/auth/register", $("registerButton"), "注册中...");
+});
+
+$("logoutButton").addEventListener("click", async () => {
+  try {
+    await api("/auth/logout", { method: "POST" });
+  } finally {
+    showAuthenticated(null);
+    $("authPassword").value = "";
+  }
+});
+
+async function bootstrap() {
+  await refreshServiceStatus();
+  try {
+    const account = await api("/auth/status");
+    if (!account.authenticated) {
+      showAuthenticated(null);
+      return;
+    }
+    showAuthenticated(account);
+    const initialView = window.location.hash.replace("#", "") || "today";
+    switchView(initialView, false);
+    if (initialView === "documents" && currentUserId) await loadDocuments();
+    if ((initialView === "exam" || initialView === "library") && currentUserId) await startReadingExam();
+  } catch (_) {
+    showAuthenticated(null);
+  }
 }
 
-const initialView = window.location.hash.replace("#", "") || "today";
-switchView(initialView, false);
-refreshServiceStatus();
-if (initialView === "documents" && currentUserId) {
-  loadDocuments();
-}
-if ((initialView === "exam" || initialView === "library") && currentUserId) {
-  startReadingExam();
-}
+bootstrap();

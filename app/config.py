@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     local_dictionary_enabled: bool = True
     local_dictionary_dir: str = "database/legal-dictionaries"
     public_dictionary_fallback: bool = True
+    session_days: int = 7
+    secure_cookies: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

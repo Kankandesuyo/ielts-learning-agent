@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -29,12 +29,15 @@ def get_documents(user_id: int, db: Session = Depends(get_db)):
 
 @router.post("/upload")
 async def upload_document(
+    request: Request,
     user_id: int = Form(...),
     category: str = Form(default="general"),
     notes: str = Form(default=""),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    if request.state.account.profile_id != user_id:
+        raise HTTPException(status_code=403, detail="无权访问其他用户的数据。")
     _require_profile(db, user_id)
     document = await save_document(db, user_id, file, category, notes)
     return {"item": document_to_dict(document), "next_step": "文件已保存到资料库。下一步可以把资料内容接入 RAG。"}
